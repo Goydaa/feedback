@@ -1,82 +1,85 @@
-import sqlite3
-import os
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-very-secret-key-123' # Нужно для работы сессий
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Определяем пути
-basedir = os.path.abspath(os.path.dirname(__file__))
-db_path = os.path.join(basedir, 'database.db')
+db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login' # Куда перекидывать, если доступа нет
 
-def get_db_connection():
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Модель пользователя для авторизации
+class User(UserMixin):
+    def __init__(self, id):
+        self.id = id
 
-def init_db():
-    print("Инициализация базы данных...")
-    conn = get_db_connection()
-    with open(os.path.join(basedir, 'schema.sql'), 'r', encoding='utf-8') as f:
-        conn.executescript(f.read())
-    conn.close()
-    print("База данных успешно создана.")
+@login_manager.user_loader
+def load_user(user_id):
+    return User(user_id)
 
-# --- ВАЖНЫЙ БЛОК ДЛЯ ОБЛАКА ---
-# Этот код сработает ПРИ КАЖДОМ запуске сервера (даже на Railway)
+# Модель отзывов
+class Review(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    author = db.Column(db.String(100), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+
+# Создание базы данных (если её еще нет)
 with app.app_context():
-    if not os.path.exists(db_path):
-        init_db()
-# ------------------------------
+    db.create_all()
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
 def index():
-    conn = get_db_connection()
-    # Проверка: если таблиц нет (на всякий случай), пробуем создать
-    try:
-        categories = conn.execute('SELECT * FROM categories').fetchall()
-    except sqlite3.OperationalError:
-        conn.close()
-        init_db()
-        conn = get_db_connection()
-        categories = conn.execute('SELECT * FROM categories').fetchall()
-    
+    reviews = Review.query.all()
+    return render_template('index.html', reviews=reviews)
+
+@app.route('/leave_review', methods=['GET', 'POST'])
+def leave_review():
     if request.method == 'POST':
-        category_id = request.form.get('category')
-        email = request.form.get('email')
-        title = request.form.get('title')
-        content = request.form.get('content')
-        
-        if not all([category_id, email, title, content]):
-            conn.close()
-            return "<h3>Ошибка: Заполните все поля!</h3><a href='/'>Назад</a>"
+        author = request.form.get('author')
+        text = request.form.get('text')
+        if author and text:
+            new_review = Review(author=author, text=text)
+            db.session.add(new_review)
+            db.session.commit()
+            return redirect(url_for('index'))
+    return render_template('leave_review.html')
 
-        if len(content) < 10:
-            conn.close()
-            return "<h3>Ошибка: Сообщение слишком короткое.</h3><a href='/'>Назад</a>"
-            
-        priority = 'Высокий' if category_id == '2' else 'Средний'
-        
-        conn.execute('INSERT INTO feedback (category_id, email, title, content, priority) VALUES (?, ?, ?, ?, ?)',
-                     (category_id, email, title, content, priority))
-        conn.commit()
-        conn.close()
-        return f"<h3>Успех! Ответ придет на {email}</h3><a href='/'>Вернуться</a>"
+# Страница входа
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        # Простейшая проверка (замени на свои данные при желании)
+        if username == 'admin' and password == 'admin':
+            user = User(id=1)
+            login_user(user)
+            return redirect(url_for('admin'))
+        else:
+            return "Неверный логин или пароль", 401
+    return '''
+        <form method="post">
+            <input type="text" name="username" placeholder="Логин">
+            <input type="password" name="password" placeholder="Пароль">
+            <button type="submit">Войти</button>
+        </form>
+    '''
 
-    conn.close()
-    return render_template('index.html', categories=categories)
-
+# ЗАЩИЩЕННАЯ АДМИНКА
 @app.route('/admin')
+@login_required # Тот самый замок!
 def admin():
-    conn = get_db_connection()
-    feedbacks = conn.execute('''
-        SELECT f.*, c.name as cat_name 
-        FROM feedback f 
-        JOIN categories c ON f.category_id = c.id
-        ORDER BY created_at DESC
-    ''').fetchall()
-    conn.close()
-    return render_template('admin.html', feedbacks=feedbacks)
+    reviews = Review.query.all()
+    return render_template('admin.html', reviews=reviews)
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True)
