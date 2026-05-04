@@ -11,9 +11,8 @@ if not os.path.exists(instance_path):
     os.makedirs(instance_path)
 
 app = Flask(__name__, instance_path=instance_path)
-app.config['SECRET_KEY'] = 'secure-key-v3'
-# Меняем имя БД на feedback_final_v3.db для чистого запуска
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'feedback_final_v3.db')
+app.config['SECRET_KEY'] = 'secure-key-v4-priority'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'feedback_v4.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -44,12 +43,10 @@ with app.app_context():
         db.session.commit()
 
 class User(UserMixin):
-    def __init__(self, id):
-        self.id = id
+    def __init__(self, id): self.id = id
 
 @login_manager.user_loader
-def load_user(user_id):
-    return User(user_id)
+def load_user(user_id): return User(user_id)
 
 # --- МАРШРУТЫ ---
 @app.route('/', methods=['GET', 'POST'])
@@ -59,29 +56,41 @@ def index():
         if author and email and text and cat_id:
             db.session.add(Review(author=author, email=email, text=text, category_id=int(cat_id)))
             db.session.commit()
-            flash('Успешно отправлено!', 'success')
+            flash('Сообщение отправлено!', 'success')
             return redirect(url_for('index'))
     return render_template('index.html', categories=Category.query.all())
 
 @app.route('/admin')
 @login_required
 def admin():
-    return render_template('admin.html', reviews=Review.query.order_by(Review.timestamp.desc()).all())
+    reviews = Review.query.order_by(Review.timestamp.desc()).all()
+    
+    # Логика приоритетов для отображения кружков
+    for r in reviews:
+        if r.category.name in ['Техподдержка', 'Жалобы']:
+            r.priority_color = 'danger'  # Красный
+            r.priority_label = 'Высокий'
+        elif r.category.name == 'Предложения':
+            r.priority_color = 'warning' # Желтый
+            r.priority_label = 'Средний'
+        else:
+            r.priority_color = 'secondary' # Серый
+            r.priority_label = 'Низкий'
+            
+    return render_template('admin.html', reviews=reviews)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         if request.form.get('username') == 'admin' and request.form.get('password') == 'admin':
-            login_user(User(1))
-            return redirect(url_for('admin'))
-        flash('Неверный логин или пароль', 'danger')
+            login_user(User(1)); return redirect(url_for('admin'))
+        flash('Ошибка входа', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
 @login_required
 def logout():
-    logout_user()
-    return redirect(url_for('index'))
+    logout_user(); return redirect(url_for('index'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
