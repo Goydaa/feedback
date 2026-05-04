@@ -4,15 +4,18 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
-app = Flask(__name__)
+# --- ИНИЦИАЛИЗАЦИЯ ПУТЕЙ (РЕШЕНИЕ ОШИБКИ SQLITE) ---
+basedir = os.path.abspath(os.path.dirname(__file__))
+instance_path = os.path.join(basedir, 'instance')
+
+# Создаем папку instance сразу, если её нет
+if not os.path.exists(instance_path):
+    os.makedirs(instance_path)
+
+app = Flask(__name__, instance_path=instance_path)
 app.config['SECRET_KEY'] = 'dev-secret-key-98765'
 
-# --- ИСПРАВЛЕНИЕ ОШИБКИ OPERATIONALERROR (RENDER) ---
-# Получаем абсолютный путь к директории, где лежит этот файл
-basedir = os.path.abspath(os.path.dirname(__file__))
-# Путь к папке instance (где будет лежать база)
-instance_path = os.path.join(basedir, 'instance')
-# Абсолютный путь к самому файлу базы данных
+# Настройка базы данных через абсолютный путь
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'project.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -20,7 +23,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- МОДЕЛИ БАЗЫ ДАННЫХ ---
+# --- МОДЕЛИ ДАННЫХ ---
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -34,7 +37,7 @@ class Review(db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- СИСТЕМА АВТОРИЗАЦИИ ---
+# --- АВТОРИЗАЦИЯ ---
 
 class User(UserMixin):
     def __init__(self, id):
@@ -44,7 +47,7 @@ class User(UserMixin):
 def load_user(user_id):
     return User(user_id)
 
-# --- МАРШРУТЫ (ROUTES) ---
+# --- МАРШРУТЫ ---
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -60,14 +63,12 @@ def index():
             flash('Отзыв успешно отправлен!', 'success')
             return redirect(url_for('index'))
     
-    # Загружаем категории для выпадающего списка
     categories = Category.query.all()
     return render_template('index.html', categories=categories)
 
 @app.route('/admin')
 @login_required
 def admin():
-    # Показываем все отзывы, начиная с самых новых
     reviews = Review.query.order_by(Review.timestamp.desc()).all()
     return render_template('admin.html', reviews=reviews)
 
@@ -76,7 +77,6 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        # Простая проверка (для учебного проекта)
         if username == 'admin' and password == 'admin':
             user = User(id=1)
             login_user(user)
@@ -90,19 +90,14 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ЗАПУСК ПРИЛОЖЕНИЯ ---
+# --- ЗАПУСК ---
 
 if __name__ == '__main__':
     with app.app_context():
-        # ПРИНУДИТЕЛЬНОЕ СОЗДАНИЕ ПАПКИ (решает проблему из логов)
-        if not os.path.exists(instance_path):
-            os.makedirs(instance_path)
-            print(f"Директория создана: {instance_path}")
-        
-        # Создаем таблицы
+        # Создаем таблицы в БД
         db.create_all()
         
-        # Наполняем категории, если их нет в базе
+        # Заполняем категории при первом запуске
         if not Category.query.first():
             db.session.add_all([
                 Category(name='Учебный процесс'),
@@ -110,8 +105,7 @@ if __name__ == '__main__':
                 Category(name='Преподаватели')
             ])
             db.session.commit()
-            print("Базовые категории добавлены в БД")
             
-    # Запуск (Render сам назначит PORT)
-    port = int(os.environ.get("PORT", 5000))
+    # Запуск на порту Render
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
