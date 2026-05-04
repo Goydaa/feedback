@@ -65,7 +65,7 @@ def index():
 def admin():
     reviews = Review.query.order_by(Review.timestamp.desc()).all()
     
-    # Логика приоритетов для отображения кружков
+    # Обновленная логика приоритетов
     for r in reviews:
         if r.category.name in ['Техподдержка', 'Жалобы']:
             r.priority_color = 'danger'  # Красный
@@ -74,7 +74,7 @@ def admin():
             r.priority_color = 'warning' # Желтый
             r.priority_label = 'Средний'
         else:
-            r.priority_color = 'secondary' # Серый
+            r.priority_color = 'success' # Зеленый 
             r.priority_label = 'Низкий'
             
     return render_template('admin.html', reviews=reviews)
