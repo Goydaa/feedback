@@ -2,40 +2,35 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Панель модератора</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Панель администратора</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
 <body>
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
             <span class="navbar-brand">Управление отзывами</span>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">Выйти</a>
         </div>
     </nav>
+
     <div class="container">
-        <table class="table table-hover border shadow-sm">
-            <thead class="table-light">
+        <h3>Список всех отзывов</h3>
+        <table class="table table-striped table-hover mt-3">
+            <thead class="table-dark">
                 <tr>
                     <th>Дата</th>
+                    <th>Автор</th>
                     <th>Категория</th>
-                    <th>Тема</th>
-                    <th>Статус</th>
-                    <th>Приоритет</th>
+                    <th>Текст</th>
                 </tr>
             </thead>
             <tbody>
-                {% for item in feedbacks %}
+                {% for review in reviews %}
                 <tr>
-                    <td>{{ item.created_at[:10] }}</td>
-                    <td>{{ item.cat_name }}</td>
-                    <td>{{ item.title }}</td>
-                    <td><span class="badge bg-secondary">{{ item.status }}</span></td>
-                    <td>
-                        {% if item.priority == 'Высокий' %}
-                            <span class="badge rounded-circle bg-danger" style="width: 20px; height: 20px;"> </span>
-                        {% else %}
-                            <span class="badge rounded-circle bg-warning" style="width: 20px; height: 20px;"> </span>
-                        {% endif %}
-                    </td>
+                    <td>{{ review.timestamp.strftime('%d.%m.%Y %H:%M') }}</td>
+                    <td>{{ review.author }}</td>
+                    <td><span class="badge bg-info text-dark">{{ review.category.name }}</span></td>
+                    <td>{{ review.text }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
