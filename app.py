@@ -4,18 +4,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
-# --- ИНИЦИАЛИЗАЦИЯ ПУТЕЙ (РЕШЕНИЕ ОШИБКИ SQLITE) ---
+# --- ИНИЦИАЛИЗАЦИЯ ПУТЕЙ ---
 basedir = os.path.abspath(os.path.dirname(__file__))
 instance_path = os.path.join(basedir, 'instance')
 
-# Создаем папку instance сразу, если её нет
 if not os.path.exists(instance_path):
     os.makedirs(instance_path)
 
 app = Flask(__name__, instance_path=instance_path)
 app.config['SECRET_KEY'] = 'dev-secret-key-98765'
-
-# Настройка базы данных через абсолютный путь
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'project.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -36,6 +33,18 @@ class Review(db.Model):
     text = db.Column(db.Text, nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+# --- АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ТАБЛИЦ (ДЛЯ GUNICORN) ---
+# Этот блок выполняется при запуске на Render
+with app.app_context():
+    db.create_all()
+    if not Category.query.first():
+        db.session.add_all([
+            Category(name='Учебный процесс'),
+            Category(name='Инфраструктура'),
+            Category(name='Преподаватели')
+        ])
+        db.session.commit()
 
 # --- АВТОРИЗАЦИЯ ---
 
@@ -90,22 +99,7 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ЗАПУСК ---
-
+# --- ЗАПУСК ДЛЯ ЛОКАЛЬНОЙ ОТЛАДКИ ---
 if __name__ == '__main__':
-    with app.app_context():
-        # Создаем таблицы в БД
-        db.create_all()
-        
-        # Заполняем категории при первом запуске
-        if not Category.query.first():
-            db.session.add_all([
-                Category(name='Учебный процесс'),
-                Category(name='Инфраструктура'),
-                Category(name='Преподаватели')
-            ])
-            db.session.commit()
-            
-    # Запуск на порту Render
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
