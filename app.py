@@ -12,9 +12,9 @@ if not os.path.exists(instance_path):
     os.makedirs(instance_path)
 
 app = Flask(__name__, instance_path=instance_path)
-app.config['SECRET_KEY'] = 'super-secret-key-12345'
-# Используем новую БД, чтобы избежать ошибки из-за отсутствия колонки email
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'feedback_v2.db')
+app.config['SECRET_KEY'] = 'secure-feedback-key-777'
+# Новое имя БД 'universal_feedback.db', чтобы исправить Internal Server Error
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'universal_feedback.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -25,7 +25,7 @@ login_manager.login_view = 'login'
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     reviews = db.relationship('Review', backref='category', lazy=True)
 
 class Review(db.Model):
@@ -40,11 +40,15 @@ class Review(db.Model):
 with app.app_context():
     db.create_all()
     if not Category.query.first():
-        db.session.add_all([
-            Category(name='Учебный процесс'),
-            Category(name='Инфраструктура'),
-            Category(name='Преподаватели')
-        ])
+        all_categories = [
+            'Общие вопросы', 
+            'Техническая поддержка', 
+            'Предложения', 
+            'Жалобы', 
+            'Затрудняюсь ответить'
+        ]
+        for cat_name in all_categories:
+            db.session.add(Category(name=cat_name))
         db.session.commit()
 
 # --- АВТОРИЗАЦИЯ ---
@@ -71,7 +75,7 @@ def index():
             new_review = Review(author=author, email=email, text=text, category_id=int(cat_id))
             db.session.add(new_review)
             db.session.commit()
-            flash('Отзыв успешно отправлен!', 'success')
+            flash('Ваше сообщение успешно отправлено!', 'success')
             return redirect(url_for('index'))
     
     categories = Category.query.all()
@@ -92,7 +96,7 @@ def login():
             user = User(id=1)
             login_user(user)
             return redirect(url_for('admin'))
-        flash('Ошибка доступа', 'danger')
+        flash('Неверный логин или пароль', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
