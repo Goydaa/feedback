@@ -4,7 +4,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 
-# --- ИНИЦИАЛИЗАЦИЯ ПУТЕЙ ---
+# --- НАСТРОЙКИ ПУТЕЙ ---
 basedir = os.path.abspath(os.path.dirname(__file__))
 instance_path = os.path.join(basedir, 'instance')
 
@@ -12,15 +12,16 @@ if not os.path.exists(instance_path):
     os.makedirs(instance_path)
 
 app = Flask(__name__, instance_path=instance_path)
-app.config['SECRET_KEY'] = 'dev-secret-key-98765'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'project.db')
+app.config['SECRET_KEY'] = 'super-secret-key-12345'
+# Используем новую БД, чтобы избежать ошибки из-за отсутствия колонки email
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(instance_path, 'feedback_v2.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- МОДЕЛИ ДАННЫХ ---
+# --- МОДЕЛИ ---
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -30,12 +31,12 @@ class Category(db.Model):
 class Review(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     author = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
     text = db.Column(db.Text, nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
-# --- АВТОМАТИЧЕСКОЕ СОЗДАНИЕ ТАБЛИЦ (ДЛЯ GUNICORN) ---
-# Этот блок выполняется при запуске на Render
+# --- ИНИЦИАЛИЗАЦИЯ БАЗЫ ---
 with app.app_context():
     db.create_all()
     if not Category.query.first():
@@ -62,11 +63,12 @@ def load_user(user_id):
 def index():
     if request.method == 'POST':
         author = request.form.get('author')
+        email = request.form.get('email')
         text = request.form.get('text')
         cat_id = request.form.get('category_id')
         
-        if author and text and cat_id:
-            new_review = Review(author=author, text=text, category_id=int(cat_id))
+        if author and email and text and cat_id:
+            new_review = Review(author=author, email=email, text=text, category_id=int(cat_id))
             db.session.add(new_review)
             db.session.commit()
             flash('Отзыв успешно отправлен!', 'success')
@@ -90,7 +92,7 @@ def login():
             user = User(id=1)
             login_user(user)
             return redirect(url_for('admin'))
-        flash('Неверный логин или пароль', 'danger')
+        flash('Ошибка доступа', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -99,7 +101,6 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-# --- ЗАПУСК ДЛЯ ЛОКАЛЬНОЙ ОТЛАДКИ ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
